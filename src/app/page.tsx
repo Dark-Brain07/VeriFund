@@ -21,8 +21,22 @@ let client = createClient({
 
 const CONTRACT_ADDRESS = "0x27f2682A5a738Ac548BAf89a2c44bD02B489dDa7";
 
+// EIP-6963 Interfaces
+interface EIP6963ProviderDetail {
+  info: {
+    uuid: string;
+    name: string;
+    icon: string;
+    rdns: string;
+  };
+  provider: any;
+}
+
 export default function Home() {
   const [account, setAccount] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider] = useState<any>(null);
+  const [discoveredWallets, setDiscoveredWallets] = useState<EIP6963ProviderDetail[]>([]);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState("discover");
@@ -70,33 +84,57 @@ export default function Home() {
     }
   };
 
+  // EIP-6963 Wallet Discovery
+  useEffect(() => {
+    const onAnnounceProvider = (event: any) => {
+      setDiscoveredWallets((prev) => {
+        // Prevent duplicates
+        if (prev.some((p) => p.info.uuid === event.detail.info.uuid)) return prev;
+        return [...prev, event.detail];
+      });
+    };
+
+    window.addEventListener("eip6963:announceProvider", onAnnounceProvider);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+    // Fallback: If no EIP-6963 wallets found after a second, check for legacy window.ethereum
+    setTimeout(() => {
+      setDiscoveredWallets((prev) => {
+        if (prev.length === 0 && typeof window !== "undefined" && (window as any).ethereum) {
+          return [{
+            info: { uuid: 'legacy', name: 'Browser Wallet', icon: '', rdns: 'legacy' },
+            provider: (window as any).ethereum
+          }];
+        }
+        return prev;
+      });
+    }, 1000);
+
+    return () => window.removeEventListener("eip6963:announceProvider", onAnnounceProvider);
+  }, []);
+
   useEffect(() => {
     fetchProjects();
   }, []);
 
-  const connectWallet = async () => {
-    if (typeof window !== "undefined" && (window as any).ethereum) {
-      try {
-        const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
-        const walletAddress = accounts[0];
-        setAccount(walletAddress);
-        
-        client = createClient({
-          chain: testnetBradbury,
-          account: walletAddress as `0x${string}`,
-          provider: (window as any).ethereum,
-        });
-        
-        // Prompt wallet to switch to GenLayer network
-        await client.connect();
-        
-        // Fetch projects now that we have a valid provider!
-        await fetchProjects();
-      } catch (err) {
-        console.error("Wallet connection failed:", err);
-      }
-    } else {
-      alert("Please install MetaMask or another EVM wallet to connect.");
+  const connectSpecificWallet = async (wallet: EIP6963ProviderDetail) => {
+    try {
+      const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' });
+      const walletAddress = accounts[0];
+      setAccount(walletAddress);
+      setActiveProvider(wallet.provider);
+      
+      client = createClient({
+        chain: testnetBradbury,
+        account: walletAddress as `0x${string}`,
+        provider: wallet.provider,
+      });
+      
+      setIsWalletModalOpen(false);
+      await fetchProjects();
+    } catch (err) {
+      console.error("Wallet connection failed:", err);
+      alert("Failed to connect wallet.");
     }
   };
 
@@ -110,7 +148,7 @@ export default function Home() {
       const writeClient = createClient({
         chain: testnetBradbury,
         account: account as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: activeProvider,
       });
 
       const txHash = await writeClient.writeContract({
@@ -138,7 +176,7 @@ export default function Home() {
       const writeClient = createClient({
         chain: testnetBradbury,
         account: account as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: activeProvider,
       });
 
       const txHash = await writeClient.writeContract({
@@ -165,7 +203,7 @@ export default function Home() {
       const writeClient = createClient({
         chain: testnetBradbury,
         account: account as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: activeProvider,
       });
 
       const txHash = await writeClient.writeContract({
@@ -187,7 +225,7 @@ export default function Home() {
       const writeClient = createClient({
         chain: testnetBradbury,
         account: account as `0x${string}`,
-        provider: (window as any).ethereum,
+        provider: activeProvider,
       });
 
       const txHash = await writeClient.writeContract({
@@ -243,13 +281,50 @@ export default function Home() {
               </DialogContent>
             </Dialog>
 
-            <Button 
-              onClick={connectWallet}
-              className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              <Wallet className="mr-2 w-4 h-4" />
-              {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"}
-            </Button>
+            {account ? (
+              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-full">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-sm font-medium">{account.slice(0, 6)}...{account.slice(-4)}</span>
+              </div>
+            ) : (
+              <Dialog open={isWalletModalOpen} onOpenChange={setIsWalletModalOpen}>
+                <DialogTrigger 
+                  render={
+                    <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                      <Wallet className="mr-2 w-4 h-4" />
+                      Connect Wallet
+                    </Button>
+                  }
+                />
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Connect Wallet</DialogTitle>
+                    <DialogDescription>
+                      Choose your preferred browser wallet to connect to VeriFund.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-3 py-4">
+                    {discoveredWallets.length === 0 ? (
+                      <p className="text-sm text-center text-muted-foreground">Looking for wallets...</p>
+                    ) : (
+                      discoveredWallets.map((wallet) => (
+                        <Button
+                          key={wallet.info.uuid}
+                          variant="outline"
+                          className="w-full justify-start h-14 text-lg"
+                          onClick={() => connectSpecificWallet(wallet)}
+                        >
+                          {wallet.info.icon && (
+                            <img src={wallet.info.icon} alt={wallet.info.name} className="w-8 h-8 mr-4 rounded-md" />
+                          )}
+                          {wallet.info.name}
+                        </Button>
+                      ))
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
       </header>
@@ -284,7 +359,7 @@ export default function Home() {
               <div className="text-center py-12 text-zinc-500 flex flex-col items-center justify-center">
                 <Wallet className="w-12 h-12 mb-4 text-zinc-300 dark:text-zinc-700" />
                 <p className="mb-4">Please connect your wallet to read live data from the GenLayer network.</p>
-                <Button onClick={connectWallet} variant="outline" className="rounded-full">Connect Wallet</Button>
+                <Button onClick={() => setIsWalletModalOpen(true)} variant="outline" className="rounded-full">Connect Wallet</Button>
               </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-12 text-zinc-500">No active projects found. Start one above!</div>
