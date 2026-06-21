@@ -219,12 +219,14 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
             <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="hidden sm:flex rounded-full">
-                  <Target className="mr-2 w-4 h-4" />
-                  Start a Project
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger 
+                render={
+                  <Button variant="outline" className="hidden sm:flex rounded-full">
+                    <Target className="mr-2 w-4 h-4" />
+                    Start a Project
+                  </Button>
+                }
+              />
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                   <DialogTitle>Launch New Project</DialogTitle>
