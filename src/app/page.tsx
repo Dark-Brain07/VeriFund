@@ -12,14 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ShieldCheck, Target, Wallet, CheckCircle2, Link as LinkIcon, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { createClient } from "genlayer-js";
-import { studionet } from "genlayer-js/chains";
+import { testnetBradbury } from "genlayer-js/chains";
 
 // Initialize a generic read-only client, upgraded later when wallet connects
 let client = createClient({
-  chain: studionet,
+  chain: testnetBradbury,
 });
 
-const CONTRACT_ADDRESS = "0xF842313658a667433CeF9f79bbB4C55F099147B2";
+const CONTRACT_ADDRESS = "0x27f2682A5a738Ac548BAf89a2c44bD02B489dDa7";
 
 export default function Home() {
   const [account, setAccount] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function Home() {
         setAccount(walletAddress);
         
         client = createClient({
-          chain: studionet,
+          chain: testnetBradbury,
           account: walletAddress as `0x${string}`,
           provider: (window as any).ethereum,
         });
