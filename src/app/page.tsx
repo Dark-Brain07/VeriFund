@@ -117,13 +117,12 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'create_project',
         args: [newDesc, newTarget],
-        account: account as `0x${string}`,
       });
       alert(`Project created! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000); // Reload projects
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Creation failed. See console.");
+      alert("Creation failed: " + (err.message || err.toString()));
     } finally {
       setIsCreating(false);
     }
@@ -146,13 +145,12 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'verify_milestone',
         args: [projectId, url],
-        account: account as `0x${string}`,
       });
       alert(`Verification submitted! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Verification failed:", err);
-      alert("Failed to verify. Check console.");
+      alert("Verification failed: " + (err.message || err.toString()));
     } finally {
       setIsVerifying(false);
     }
@@ -174,13 +172,12 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'fund_project',
         args: [projectId, amt],
-        account: account as `0x${string}`,
       });
       alert(`Funded successfully! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Funding failed:", err);
-      alert("Funding failed. Check console.");
+      alert("Funding failed: " + (err.message || err.toString()));
     }
   };
 
@@ -197,13 +194,12 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'withdraw_funds',
         args: [projectId],
-        account: account as `0x${string}`,
       });
       alert(`Funds withdrawn successfully! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Withdrawal failed:", err);
-      alert("Failed to withdraw funds. See console.");
+      alert("Failed to withdraw: " + (err.message || err.toString()));
     }
   };
 
