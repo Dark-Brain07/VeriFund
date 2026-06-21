@@ -195,9 +195,13 @@ export default function Home() {
   };
 
   const handleFund = async (projectId: string) => {
-    const amt = fundAmount[projectId];
-    if (!amt) return;
+    const rawAmt = fundAmount[projectId];
+    if (!rawAmt) return;
     if (!account) return alert("Please connect your wallet first");
+    
+    const amtInt = parseInt(rawAmt);
+    if (isNaN(amtInt) || amtInt < 1) return alert("Please enter a whole number of at least 1 (decimals are not supported).");
+    const amt = amtInt.toString();
     
     try {
       const writeClient = createClient({
