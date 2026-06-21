@@ -108,6 +108,7 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'create_project',
         args: [newDesc, newTarget],
+        account: account as `0x${string}`,
       });
       alert(`Project created! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000); // Reload projects
@@ -128,6 +129,7 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'verify_milestone',
         args: [projectId, url],
+        account: account as `0x${string}`,
       });
       alert(`Verification submitted! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
@@ -147,6 +149,7 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'fund_project',
         args: [projectId, amt],
+        account: account as `0x${string}`,
       });
       alert(`Funded successfully! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
@@ -162,6 +165,7 @@ export default function Home() {
         address: CONTRACT_ADDRESS,
         functionName: 'withdraw_funds',
         args: [projectId],
+        account: account as `0x${string}`,
       });
       alert(`Funds withdrawn successfully! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
