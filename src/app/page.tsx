@@ -102,9 +102,18 @@ export default function Home() {
 
   const handleCreate = async () => {
     if (!newDesc || !newTarget) return alert("Please fill all fields");
+    if (!account) return alert("Please connect your wallet first");
+    
     setIsCreating(true);
     try {
-      const txHash = await client.writeContract({
+      // Dynamically create a write client to avoid Next.js HMR state loss
+      const writeClient = createClient({
+        chain: testnetBradbury,
+        account: account as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
+
+      const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_project',
         args: [newDesc, newTarget],
@@ -123,9 +132,17 @@ export default function Home() {
   const handleVerify = async (projectId: string) => {
     const url = proofUrlInput[projectId];
     if (!url) return alert("Please enter a proof URL");
+    if (!account) return alert("Please connect your wallet first");
+    
     setIsVerifying(true);
     try {
-      const txHash = await client.writeContract({
+      const writeClient = createClient({
+        chain: testnetBradbury,
+        account: account as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
+
+      const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'verify_milestone',
         args: [projectId, url],
@@ -144,8 +161,16 @@ export default function Home() {
   const handleFund = async (projectId: string) => {
     const amt = fundAmount[projectId];
     if (!amt) return;
+    if (!account) return alert("Please connect your wallet first");
+    
     try {
-      const txHash = await client.writeContract({
+      const writeClient = createClient({
+        chain: testnetBradbury,
+        account: account as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
+
+      const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'fund_project',
         args: [projectId, amt],
@@ -160,8 +185,15 @@ export default function Home() {
   };
 
   const handleWithdraw = async (projectId: string) => {
+    if (!account) return alert("Please connect your wallet first");
     try {
-      const txHash = await client.writeContract({
+      const writeClient = createClient({
+        chain: testnetBradbury,
+        account: account as `0x${string}`,
+        provider: (window as any).ethereum,
+      });
+
+      const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'withdraw_funds',
         args: [projectId],
