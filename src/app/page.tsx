@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { ShieldCheck, Target, Wallet, CheckCircle2, Link as LinkIcon, Loader2 } from "lucide-react";
+import { ShieldCheck, Target, Wallet, CheckCircle2, Link as LinkIcon, Loader2, LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 import { createClient } from "genlayer-js";
 import { testnetBradbury } from "genlayer-js/chains";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 
 // Initialize a generic read-only client, upgraded later when wallet connects
 let client = createClient({
@@ -21,22 +22,13 @@ let client = createClient({
 
 const CONTRACT_ADDRESS = "0x27f2682A5a738Ac548BAf89a2c44bD02B489dDa7";
 
-// EIP-6963 Interfaces
-interface EIP6963ProviderDetail {
-  info: {
-    uuid: string;
-    name: string;
-    icon: string;
-    rdns: string;
-  };
-  provider: any;
-}
-
 export default function Home() {
-  const [account, setAccount] = useState<string | null>(null);
-  const [activeProvider, setActiveProvider] = useState<any>(null);
-  const [discoveredWallets, setDiscoveredWallets] = useState<EIP6963ProviderDetail[]>([]);
-  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const { ready, authenticated, user, login, logout } = usePrivy();
+  const { wallets } = useWallets();
+
+  const account = user?.wallet?.address || null;
+  const activeWallet = wallets[0];
+
   const [isVerifying, setIsVerifying] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState("discover");
@@ -84,77 +76,28 @@ export default function Home() {
     }
   };
 
-  // EIP-6963 Wallet Discovery
-  useEffect(() => {
-    const onAnnounceProvider = (event: any) => {
-      setDiscoveredWallets((prev) => {
-        // Prevent duplicates
-        if (prev.some((p) => p.info.uuid === event.detail.info.uuid)) return prev;
-        return [...prev, event.detail];
-      });
-    };
-
-    window.addEventListener("eip6963:announceProvider", onAnnounceProvider);
-    window.dispatchEvent(new Event("eip6963:requestProvider"));
-
-    // Fallback: If no EIP-6963 wallets found after a second, check for legacy window.ethereum
-    setTimeout(() => {
-      setDiscoveredWallets((prev) => {
-        if (prev.length === 0 && typeof window !== "undefined" && (window as any).ethereum) {
-          return [{
-            info: { uuid: 'legacy', name: 'Browser Wallet', icon: '', rdns: 'legacy' },
-            provider: (window as any).ethereum
-          }];
-        }
-        return prev;
-      });
-    }, 1000);
-
-    return () => window.removeEventListener("eip6963:announceProvider", onAnnounceProvider);
-  }, []);
-
   useEffect(() => {
     fetchProjects();
   }, []);
 
-  const connectSpecificWallet = async (wallet: EIP6963ProviderDetail) => {
-    try {
-      const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' });
-      const walletAddress = accounts[0];
-      setAccount(walletAddress);
-      setActiveProvider(wallet.provider);
-      
-      client = createClient({
-        chain: testnetBradbury,
-        account: walletAddress as `0x${string}`,
-        provider: wallet.provider,
-      });
-      
-      setIsWalletModalOpen(false);
-      await fetchProjects();
-    } catch (err) {
-      console.error("Wallet connection failed:", err);
-      alert("Failed to connect wallet.");
-    }
-  };
-
   const handleCreate = async () => {
     if (!newDesc || !newTarget) return alert("Please fill all fields");
-    if (!account) return alert("Please connect your wallet first");
+    if (!authenticated || !activeWallet) return alert("Please connect your wallet first");
     
     setIsCreating(true);
     try {
-      // Dynamically create a write client to avoid Next.js HMR state loss
+      const provider = await activeWallet.getEthereumProvider();
       const writeClient = createClient({
         chain: testnetBradbury,
-        account: account as `0x${string}`,
-        provider: activeProvider,
+        account: activeWallet.address as `0x${string}`,
+        provider: provider,
       });
 
       const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'create_project',
         args: [newDesc, newTarget],
+        value: BigInt(0),
       });
       alert(`Project created! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000); // Reload projects
@@ -169,20 +112,22 @@ export default function Home() {
   const handleVerify = async (projectId: string) => {
     const url = proofUrlInput[projectId];
     if (!url) return alert("Please enter a proof URL");
-    if (!account) return alert("Please connect your wallet first");
+    if (!authenticated || !activeWallet) return alert("Please connect your wallet first");
     
     setIsVerifying(true);
     try {
+      const provider = await activeWallet.getEthereumProvider();
       const writeClient = createClient({
         chain: testnetBradbury,
-        account: account as `0x${string}`,
-        provider: activeProvider,
+        account: activeWallet.address as `0x${string}`,
+        provider: provider,
       });
 
       const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'verify_milestone',
         args: [projectId, url],
+        value: BigInt(0),
       });
       alert(`Verification submitted! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
@@ -197,23 +142,25 @@ export default function Home() {
   const handleFund = async (projectId: string) => {
     const rawAmt = fundAmount[projectId];
     if (!rawAmt) return;
-    if (!account) return alert("Please connect your wallet first");
+    if (!authenticated || !activeWallet) return alert("Please connect your wallet first");
     
     const amtInt = parseInt(rawAmt);
     if (isNaN(amtInt) || amtInt < 1) return alert("Please enter a whole number of at least 1 (decimals are not supported).");
     const amt = amtInt.toString();
     
     try {
+      const provider = await activeWallet.getEthereumProvider();
       const writeClient = createClient({
         chain: testnetBradbury,
-        account: account as `0x${string}`,
-        provider: activeProvider,
+        account: activeWallet.address as `0x${string}`,
+        provider: provider,
       });
 
       const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'fund_project',
         args: [projectId, amt],
+        value: BigInt(0),
       });
       alert(`Funded successfully! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
@@ -224,18 +171,20 @@ export default function Home() {
   };
 
   const handleWithdraw = async (projectId: string) => {
-    if (!account) return alert("Please connect your wallet first");
+    if (!authenticated || !activeWallet) return alert("Please connect your wallet first");
     try {
+      const provider = await activeWallet.getEthereumProvider();
       const writeClient = createClient({
         chain: testnetBradbury,
-        account: account as `0x${string}`,
-        provider: activeProvider,
+        account: activeWallet.address as `0x${string}`,
+        provider: provider,
       });
 
       const txHash = await writeClient.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: 'withdraw_funds',
         args: [projectId],
+        value: BigInt(0),
       });
       alert(`Funds withdrawn successfully! Hash: ${txHash}`);
       setTimeout(fetchProjects, 2000);
@@ -285,49 +234,21 @@ export default function Home() {
               </DialogContent>
             </Dialog>
 
-            {account ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-full">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-sm font-medium">{account.slice(0, 6)}...{account.slice(-4)}</span>
+            {ready && authenticated && account ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 rounded-full">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm font-medium">{account.slice(0, 6)}...{account.slice(-4)}</span>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => logout()} className="rounded-full">
+                  <LogOut className="w-4 h-4" />
+                </Button>
               </div>
             ) : (
-              <Dialog open={isWalletModalOpen} onOpenChange={setIsWalletModalOpen}>
-                <DialogTrigger 
-                  render={
-                    <Button className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-                      <Wallet className="mr-2 w-4 h-4" />
-                      Connect Wallet
-                    </Button>
-                  }
-                />
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Connect Wallet</DialogTitle>
-                    <DialogDescription>
-                      Choose your preferred browser wallet to connect to VeriFund.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex flex-col gap-3 py-4">
-                    {discoveredWallets.length === 0 ? (
-                      <p className="text-sm text-center text-muted-foreground">Looking for wallets...</p>
-                    ) : (
-                      discoveredWallets.map((wallet) => (
-                        <Button
-                          key={wallet.info.uuid}
-                          variant="outline"
-                          className="w-full justify-start h-14 text-lg"
-                          onClick={() => connectSpecificWallet(wallet)}
-                        >
-                          {wallet.info.icon && (
-                            <img src={wallet.info.icon} alt={wallet.info.name} className="w-8 h-8 mr-4 rounded-md" />
-                          )}
-                          {wallet.info.name}
-                        </Button>
-                      ))
-                    )}
-                  </div>
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => login()} disabled={!ready} className="rounded-full bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+                <Wallet className="mr-2 w-4 h-4" />
+                Connect Wallet
+              </Button>
             )}
           </div>
         </div>
@@ -359,11 +280,11 @@ export default function Home() {
           </TabsList>
           
           <TabsContent value="discover" className="mt-0">
-            {!account ? (
+            {!authenticated ? (
               <div className="text-center py-12 text-zinc-500 flex flex-col items-center justify-center">
                 <Wallet className="w-12 h-12 mb-4 text-zinc-300 dark:text-zinc-700" />
                 <p className="mb-4">Please connect your wallet to read live data from the GenLayer network.</p>
-                <Button onClick={() => setIsWalletModalOpen(true)} variant="outline" className="rounded-full">Connect Wallet</Button>
+                <Button onClick={() => login()} disabled={!ready} variant="outline" className="rounded-full">Connect Wallet</Button>
               </div>
             ) : projects.length === 0 ? (
               <div className="text-center py-12 text-zinc-500">No active projects found. Start one above!</div>
